@@ -129,14 +129,31 @@ data %>%
 data[(data$Prey ==37),]
 ```
 
+### Looking at the data, I'm going to make some assumptions:<br/>
 ### - Prey: Number of insects/bugs in the plant(?)<br/>
 ### - Predator: Number of predators for the preys in the plant(?)<br/>
-### - Row: Location where plant is physically<br/>
+### - Row: Location where plant is physically(?) or **branches location within the plant** perhaps(?)<br/>
 ### - Week: Data collection date point<br/>
 <br/>
 To better understand the data:<br/>
 1. Visualize progression of preys and predators in the dataset, with time points,
 for one plant
+2. Check what happened to<br/>
+
+```{r plots, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tidyverse)
+
+options(scipen=999)  # turn-off scientific notation like 1e+48
+theme_set(theme_classic())  # pre-set the bw theme.
+
+
+# Let's check first the rows where Predator == 0:
+no_pred = data[data$Predator == 0,]
+
+# Check no_pred
+no_pred
+```
 
 ### Check changes in number of preys and predators per plant each week
 ```{r echo=FALSE, warning=FALSE, message=F}
@@ -145,40 +162,19 @@ library(RColorBrewer)
 library(grid)
 library(ggpubr)
 
-# Transform data
-t <- data %>% 
-   group_by(Week, Plant) %>% 
-    # Add columns with total nr of preys and predators
-   mutate(TotalPreyPerWeek = sum(Prey),
-          TotalPredatorPerWeek = sum(Predator)) %>%
-   ungroup %>%
-    # Create counts column that holds nr of preys and predators found
-    gather(Prey, Predator, key = "Prey/Predator", value = "Counts") %>%
-    # Create counts column that holds nr of preys and predators found
-    gather(TotalPreyPerWeek, TotalPredatorPerWeek, key = "Total Prey/Predator", value = "Total Counts")
-
-ggplot(t %>% filter(Row==3)) + 
-  geom_line(aes(x=Week, y = `Total Counts`, color=`Total Prey/Predator`), 
-             alpha=0.4) +
-  labs(
-       y="Rows", 
-       x="Weeks") + 
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.margin = margin(1,1,1.5,1.2, "cm")) + 
-  scale_color_manual(values = c("Prey" = "#66C2A5","Predator"= "#FC8D62"))
-
 # Scatterplot
 for (var in 1:length(unique(data$Plant))){
-  assign(paste0("gg_", var), ggplot(data) + 
-  geom_point(aes(x=Plant, y = Row, 
-                 size=Counts, color=`Prey/Predator`), 
-             alpha=0.4) +
+  assign(paste0("gg_", var), ggplot(data %>% 
+             filter(Plant == var)
+             ) + 
+  geom_point(aes(x=Week, y = Prey), col="#66C2A5", alpha=0.4) +
+  geom_point(aes(x=Week, y = Predator), col="#FC8D62", alpha=0.4) +
+  # ggtitle(paste("Preys in plant", var)) +
   labs(
-       y="Plants", 
-       x="Row") + 
+       y="Preys", 
+       x=paste("Plant", var)) + 
   theme(plot.title = element_text(hjust = 0.5),
-        plot.margin = margin(1,1,1.5,1.2, "cm")) + 
-  scale_color_manual(values = c("Prey" = "#66C2A5","Predator"= "#FC8D62")))
+        plot.margin = margin(1,1,1.5,1.2, "cm")))
 }
 
 p <- grid.arrange(
@@ -239,22 +235,6 @@ knitr::include_graphics("PlantsPlot.pdf")
 
 ```
 
-```{r}
-
-ggplot(data) + 
-  geom_point(aes(x=Plant, y = Row, 
-                 size=Counts, color=`Prey/Predator`), 
-             alpha=0.4) +
-  labs(
-       y="Plants", 
-       x="Row") + 
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.margin = margin(1,1,1.5,1.2, "cm")) + 
-  scale_color_manual(values = c("Prey" = "#66C2A5","Predator"= "#FC8D62"))
-
-```
-
-
 ### Check changes in number of preys and predators each week per plant row
 ```{r echo=FALSE, warning=FALSE, message=F}
 library(gridExtra)
@@ -272,7 +252,7 @@ for (var in 1:length(unique(data$Plant))){
   geom_point(aes(x=Week, y = Row, size = Predator), color="#FC8D62",alpha=0.4) +
   # ggtitle(paste("Preys in plant", var)) +
   labs(
-       y="Row", 
+       y="Rows", 
        x=paste0("Plant #", var)) + 
   theme(plot.title = element_text(hjust = 0.5),
         plot.margin = margin(1,1,1.5,1.2, "cm")))
@@ -445,12 +425,12 @@ logistic_pars = c(r = unname(rsn_pars["(Intercept)"]),
 
 nls_model = nls(
   Prey ~ get_logistic(time = Day, N0, r, K),
-  data = data_prey_row3#,
-  # start = c(
-  #   N0 = unname(data_prey_row3$Prey[which.min(data_prey_row3$Datum)]),
-  #   r = unname(logistic_pars["r"]),
-  #   K = unname(logistic_pars["K"])#,
-    # Day = min(data_prey_row3$Datum)
+  data = data_prey_row3,
+  start = c(
+    N0 = unname(data_prey_row3$Prey[which.min(data_prey_row3$Datum)]),
+    r = unname(logistic_pars["r"]),
+    K = unname(logistic_pars["K"]),
+    Day = min(data_prey_row3$Datum)
   )
 )
 summary (nls_model)
