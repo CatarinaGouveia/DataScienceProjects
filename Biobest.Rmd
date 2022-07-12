@@ -1,0 +1,457 @@
+---
+title: "Biobest_Dataset"
+author: "Catarina Gouveia"
+output: html_document
+theme: united
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(knitr)
+```
+
+
+# Tasks: {.tabset .tabset-pills}
+<br/>
+1. Descriptive analytics
+    - Describe the dataset in comprehensive figures/tables. 
+    What can we learn from this dataset? What do you see? 
+<br/>
+<br/>
+2. Predictive analytics
+    - Use your statistical skills to build a first predictive model (e.g. regression models, differential equations, AI,…)
+    - Question: can we predict the population dynamics one or two weeks in advance??
+<br/>
+<br/>
+3. Discussion: What would you do with this dataset if you had more time? Which techniques could improve the model? Are we missing parameters?
+<br/>
+
+## Data Exploration 
+```{r}
+data <- read_excel("~/Documents/DataScienceJobsChallenges/DataScienceProjects/BiobestData/Test dataset.xlsx")
+nrow(data)
+ncol(data)
+colnames(data)
+str(data)
+summary(data)
+```
+
+### Check data
+
+```{r}
+head(data)
+```
+```{r}
+data$Plant <- as.numeric(data$Plant)
+data$Prey <- as.numeric(data$Prey)
+data$Predator <- as.numeric(data$Predator)
+data$Datum <- as.Date(data$Datum)
+# Transform week nr to date to see if it matches:
+data$WeekDate <- as.Date(paste(2016, data$Week, 2, sep="-"), "%Y-%U-%u")
+```
+
+(Note: there is a slight desilign but the week was probably generated from the 
+Datum)<br/>
+
+### Check nr of unique preys, plants and predators<br/>
+```{r}
+nrow(unique(data["Prey"]))
+nrow(unique(data["Plant"]))
+nrow(unique(data["Predator"]))
+```
+```{r}
+unique(data$Row)
+```
+
+```{r,message=FALSE, warning=FALSE}
+library(dplyr)
+# list rows with missing values
+data %>% 
+  filter(if_any(everything(), is.na))
+```
+330 rows with missing Prey and Predator data<br/><br/>
+
+Continuing exploration:<br/><br/>
+
+Count number of rows with missing data per plant:<br/>
+```{r}
+data %>% 
+  filter(if_any(everything(), is.na)) %>% 
+  count(Plant)
+```
+Since plants 31,32,33,34,35 are missing a lot of data, we can remove them \
+from the final analysis (they might be considered as outliers).
+But before that let's look into more detail to plants 34 and 35 to confirm \
+that we can remove them.<br/>
+```{r}
+data %>% filter(Plant ==34)
+
+data %>% filter(Plant ==35)
+```
+
+How many data points were collected each week?<br/>
+```{r, echo = FALSE}
+table(data$Week)
+```
+- 315 each week<br/><br/>
+
+Let's look into which points are collected each week. Are they the same?<br/>
+```{r}
+data %>% 
+  filter(Week==18)
+
+# Because there are only 35 plants check what are the data points for week 18, plant 1
+data %>% 
+  filter(Week==18 & Plant == 1)
+# And now plant 2
+data %>% 
+  filter(Week==18 & Plant == 2)
+
+table(data$Plant)
+
+table(data$Plant, data$Row)
+```
+Notes: <br/>
+- There are 9 records per plant, per week<br/>
+- There are 81 records per plant<br/>
+- There are 9 records per plant per row<br/>
+
+```{r, message=FALSE, warning=FALSE}
+# Checking preys in more depth
+table(data$Prey)
+
+# And now prey 37
+data %>% 
+  filter(Week==18 & Prey == 37)
+
+# And now prey 37 in general
+data[(data$Prey ==37),]
+```
+
+### - Prey: Number of insects/bugs in the plant(?)<br/>
+### - Predator: Number of predators for the preys in the plant(?)<br/>
+### - Row: Location where plant is physically<br/>
+### - Week: Data collection date point<br/>
+<br/>
+To better understand the data:<br/>
+1. Visualize progression of preys and predators in the dataset, with time points,
+for one plant
+
+### Check changes in number of preys and predators per plant each week
+```{r echo=FALSE, warning=FALSE, message=F}
+library(gridExtra)
+library(RColorBrewer)
+library(grid)
+library(ggpubr)
+
+# Transform data
+t <- data %>% 
+   group_by(Week, Plant) %>% 
+    # Add columns with total nr of preys and predators
+   mutate(TotalPreyPerWeek = sum(Prey),
+          TotalPredatorPerWeek = sum(Predator)) %>%
+   ungroup %>%
+    # Create counts column that holds nr of preys and predators found
+    gather(Prey, Predator, key = "Prey/Predator", value = "Counts") %>%
+    # Create counts column that holds nr of preys and predators found
+    gather(TotalPreyPerWeek, TotalPredatorPerWeek, key = "Total Prey/Predator", value = "Total Counts")
+
+ggplot(t %>% filter(Row==3)) + 
+  geom_line(aes(x=Week, y = `Total Counts`, color=`Total Prey/Predator`), 
+             alpha=0.4) +
+  labs(
+       y="Rows", 
+       x="Weeks") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.margin = margin(1,1,1.5,1.2, "cm")) + 
+  scale_color_manual(values = c("Prey" = "#66C2A5","Predator"= "#FC8D62"))
+
+# Scatterplot
+for (var in 1:length(unique(data$Plant))){
+  assign(paste0("gg_", var), ggplot(data) + 
+  geom_point(aes(x=Plant, y = Row, 
+                 size=Counts, color=`Prey/Predator`), 
+             alpha=0.4) +
+  labs(
+       y="Plants", 
+       x="Row") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.margin = margin(1,1,1.5,1.2, "cm")) + 
+  scale_color_manual(values = c("Prey" = "#66C2A5","Predator"= "#FC8D62")))
+}
+
+p <- grid.arrange(
+  gg_1,
+  gg_2,
+  gg_3,
+  gg_4,
+  gg_5,
+  gg_6,
+  gg_7,
+  gg_8,
+  gg_9,
+  gg_10,
+  gg_11,
+  gg_12,
+  gg_13,
+  gg_14,
+  gg_15,
+  gg_16,
+  gg_17,
+  gg_18,
+  gg_19,
+  gg_20,
+  gg_21,
+  gg_22,
+  gg_23,
+  gg_24,
+  gg_25,
+  gg_26,
+  gg_27,
+  gg_28,
+  gg_29,
+  gg_30,
+  gg_31,
+  gg_32,
+  gg_33,
+  gg_34,
+  gg_35 + theme(legend.position="right", legend.box = "horizontal"),
+  nrow = 12,
+  ncol=3,
+  bottom = textGrob(
+    "Source: Biobest",
+    gp = gpar(fontface = 3, fontsize = 9),
+    hjust = 1,
+    x = 1
+  )
+)
+
+ggsave("PlantsPlot.pdf", p, "pdf", width = 20, height = 100, units = "cm")
+
+# plot(p)
+```
+
+
+```{r, fig.dim=c(20, 40)}
+
+knitr::include_graphics("PlantsPlot.pdf")
+
+```
+
+```{r}
+
+ggplot(data) + 
+  geom_point(aes(x=Plant, y = Row, 
+                 size=Counts, color=`Prey/Predator`), 
+             alpha=0.4) +
+  labs(
+       y="Plants", 
+       x="Row") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.margin = margin(1,1,1.5,1.2, "cm")) + 
+  scale_color_manual(values = c("Prey" = "#66C2A5","Predator"= "#FC8D62"))
+
+```
+
+
+### Check changes in number of preys and predators each week per plant row
+```{r echo=FALSE, warning=FALSE, message=F}
+library(gridExtra)
+library(RColorBrewer)
+library(grid)
+library(ggpubr)
+
+
+# Scatterplot
+for (var in 1:length(unique(data$Plant))){
+  assign(paste0("gg_", var), ggplot(data %>% 
+             filter(Plant == var)
+             ) + 
+  geom_point(aes(x=Week, y = Row, size = Prey), color="#66C2A5", alpha=0.4) +
+  geom_point(aes(x=Week, y = Row, size = Predator), color="#FC8D62",alpha=0.4) +
+  # ggtitle(paste("Preys in plant", var)) +
+  labs(
+       y="Row", 
+       x=paste0("Plant #", var)) + 
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.margin = margin(1,1,1.5,1.2, "cm")))
+  
+}
+
+
+p <- grid.arrange(ggtitle(paste("Preys and predators in rows per plant", var)),
+  gg_1,
+  gg_2,
+  gg_3,
+  gg_4,
+  gg_5,
+  gg_6,
+  gg_7,
+  gg_8,
+  gg_9,
+  gg_10,
+  gg_11,
+  gg_12,
+  gg_13,
+  gg_14,
+  gg_15,
+  gg_16,
+  gg_17,
+  gg_18,
+  gg_19,
+  gg_20,
+  gg_21,
+  gg_22,
+  gg_23,
+  gg_24,
+  gg_25,
+  gg_26,
+  gg_27,
+  gg_28,
+  gg_29,
+  gg_30,
+  gg_31,
+  gg_32,
+  gg_33,
+  gg_34,
+  gg_35,
+  nrow = 12,
+  ncol=3,
+  bottom = textGrob(
+    "Source: Biobest",
+    gp = gpar(fontface = 3, fontsize = 9),
+    hjust = 1,
+    x = 1
+  )
+) 
+
+ggsave("PlantsPlot2.pdf", p, "pdf", width = 50, height = 100, units = "cm")
+
+# plot(p)
+```
+
+```{r, fig.dim=c(40, 80)}
+
+knitr::include_graphics("PlantsPlot2.pdf")
+
+```
+### Some conclusions:
+
+####- By looking at the data, it looks like the number of preys grows until week 22 
+(starting on week 18) and then it starts to decrease, with the number of 
+predators reaching its highest on weeks 23 and 24 (then decreasing as well)
+####- Note: For some reason the middle rows seem to be more affected by the preys
+
+## Predictive Analytics 
+- Depict what is going to happen on week 27 and 28
+
+- Try to predict what is going to happen on week 27 and 28
+```{r}
+# Count number of total preys and predators per week
+t <- data %>% 
+   group_by(Week, Plant) %>% 
+   mutate(TotalPreyPerWeek = sum(Prey),
+          TotalPredatorPerWeek = sum(Predator)) %>%
+   ungroup
+
+p <- ggplot(t, aes(Week)) +
+  geom_line(aes(y=TotalPreyPerWeek, 
+                # group=Plant, 
+                color=TotalPreyPerWeekcolor), 
+            color="dark green",
+            alpha=0.4, show.legend=T) +
+  geom_line( aes(y=TotalPredatorPerWeek, 
+                 # group=Plant, 
+                 color=TotalPredatorPerWeek), 
+            color="dark red", 
+            show.legend=T,
+            alpha=0.4) +
+ theme(legend.title=element_text(size=20),
+       legend.text=element_text(size=14))
+p
+
+```
+
+Lotka-Volterra Model
+```{r}
+library(tidyverse)
+library(deSolve)
+library(FME)
+
+```
+
+```{r}
+## -----------------------------------------------------------------------------
+## Define R-function
+## -----------------------------------------------------------------------------   
+
+LV <- function(t, y, parms) {
+    with(as.list(c(y, parms)), {
+  
+        dP <- rG * P * (1 - P/K) - rI * P * C
+        dC <- rI * P * C * AE - rM * C
+            
+        return(list(c(dP, dC), sum = C+P))
+    })
+}
+
+# Source: https://riptutorial.com/r/example/24636/lotka-volterra-or--prey-vs--predator
+```
+
+```{r}
+## -----------------------------------------------------------------------------
+## Define parameters and variables
+## -----------------------------------------------------------------------------
+library(gauseR)
+# Run the code below to calculate per-capita growth rate (dNNdt) using the lagged
+# differences and then plot it versus abundances N.
+# calculate time-lagged abundance using the gauseR command get_lag
+data_prey_row3 <- t[t$Row == 3, ]
+lagged_data_prey_row3 = get_lag(x = data_prey_row3$Prey, time = data_prey_row3$Datum)
+data_prey_row3$dNNdt = percap_growth(x = lagged_data_prey_row3$x,
+                                       laggedx =
+                                         lagged_data_prey_row3$laggedx,
+                                       dt = lagged_data_prey_row3$dt)
+
+# plot relationship
+plot(
+  lagged_data_prey_row3$dNNdt ~ data_prey_row3$Prey,
+  xlab = "Lagged Abundance (N)",
+  ylab = "Per-capita Growth Rate (dN/Ndt)",
+  xlim = c (0,
+            250),
+  ylim = c (-0.1, 0.4)
+)
+
+## -----------------------------------------------------------------------------
+## Run the code to fit a linear regression model (a line) to the newly obtained per-capita growth rate dNNdt.
+## -----------------------------------------------------------------------------
+
+# fit model to relationship to get dNNdt ~ r + s*N
+Model_Pc = lm(dNNdt ~ Prey, data = data_prey_row3)
+#plot the model as a line in red
+abline(Model_Pc, lwd = 2, col = 2)
+
+## -----------------------------------------------------------------------------
+## Extract the parameters 𝑟 and 𝑠 from the linear regression model using the command:
+## -----------------------------------------------------------------------------
+
+rsn_pars = coef(Model_Pc)
+
+logistic_pars = c(r = unname(rsn_pars["(Intercept)"]),
+                  K = unname(-rsn_pars["(Intercept)"] / rsn_pars["Prey"]))
+
+
+nls_model = nls(
+  Prey ~ get_logistic(time = Day, N0, r, K),
+  data = data_prey_row3#,
+  # start = c(
+  #   N0 = unname(data_prey_row3$Prey[which.min(data_prey_row3$Datum)]),
+  #   r = unname(logistic_pars["r"]),
+  #   K = unname(logistic_pars["K"])#,
+    # Day = min(data_prey_row3$Datum)
+  )
+)
+summary (nls_model)
+```
