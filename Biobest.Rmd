@@ -47,12 +47,8 @@ data$Plant <- as.numeric(data$Plant)
 data$Prey <- as.numeric(data$Prey)
 data$Predator <- as.numeric(data$Predator)
 data$Datum <- as.Date(data$Datum)
-# Transform week nr to date to see if it matches:
-data$WeekDate <- as.Date(paste(2016, data$Week, 2, sep="-"), "%Y-%U-%u")
 ```
 
-(Note: there is a slight desilign but the week was probably generated from the 
-Datum)<br/>
 
 ### Check nr of unique preys, plants and predators<br/>
 ```{r}
@@ -71,42 +67,52 @@ data %>%
   filter(if_any(everything(), is.na))
 ```
 330 rows with missing Prey and Predator data<br/><br/>
+```{r}
+# Check which plants have missing values
+data %>% 
+  filter(if_any(everything(), is.na)) %>%
+  group_by(Plant) %>% 
+  summarise(NA_prey = sum(is.na(Prey)),
+            NA_predator = sum(is.na(Predator)))
 
-Continuing exploration:<br/><br/>
+# Check this a bit further:
+kable(data %>% 
+     filter(if_any(everything(), is.na)) %>% filter(Plant ==28))
+
+kable(data %>% 
+     filter(if_any(everything(), is.na)) %>% filter(Plant ==29))
+
+```
+It looks like when the Prey info is missing the predator info is also missing, not sure why...
+<br/><br/>
+
+#### Continuing exploration:<br/><br/>
 
 Count number of rows with missing data per plant:<br/>
 ```{r}
-data %>% 
+kable(data %>% 
   filter(if_any(everything(), is.na)) %>% 
-  count(Plant)
+  count(Plant))
 ```
-Since plants 31,32,33,34,35 are missing a lot of data, we can remove them \
-from the final analysis (they might be considered as outliers).
-But before that let's look into more detail to plants 34 and 35 to confirm \
-that we can remove them.<br/>
-```{r}
-data %>% filter(Plant ==34)
 
-data %>% filter(Plant ==35)
-```
 
 How many data points were collected each week?<br/>
 ```{r, echo = FALSE}
-table(data$Week)
+kable(table(data$Week))
 ```
 - 315 each week<br/><br/>
 
 Let's look into which points are collected each week. Are they the same?<br/>
 ```{r}
-data %>% 
-  filter(Week==18)
+kable(data %>% 
+  filter(Week==18) %>% head())
 
 # Because there are only 35 plants check what are the data points for week 18, plant 1
-data %>% 
-  filter(Week==18 & Plant == 1)
+kable(data %>% 
+  filter(Week==18 & Plant == 1) %>% head())
 # And now plant 2
-data %>% 
-  filter(Week==18 & Plant == 2)
+kable(data %>% 
+  filter(Week==18 & Plant == 2) %>% head())
 
 table(data$Plant)
 
@@ -150,9 +156,6 @@ for (var in 1:length(unique(data$Plant))){
                        breaks=c("Prey", "Predator"),
                        values = c("Prey" = "#66C2A5","Predator"= "#FC8D62")) +
     scale_alpha(guide = 'none') +
-  # geom_point(aes(x=Week, y = Row, size = Prey), color="#66C2A5", alpha=0.4, show.legend=F) +
-  # geom_point(aes(x=Week, y = Row, size = Predator), color="#FC8D62",alpha=0.4, show.legend=F) +
-  # ggtitle(paste("Preys in plant", var)) +
   labs(
        y="Rows", 
        x=paste0("Plant #", var)) + 
@@ -375,9 +378,11 @@ library(deSolve)
 
 LV <- function(t, y, parms) {
     with(as.list(c(y, parms)), {
-  
+        
+        # Model for interspecific competition
         # dP <- rG * P * (1 - P/K) - rI * P * C # Prey
         # dC <- rI * P * C * AE - rM * C # Predator
+        # Model for prey-predator competition
         dP <- alpha * P - beta * C * P # Prey
         dC <- gamma * P * C - delta * C # Predator
             
@@ -467,10 +472,18 @@ legend(
 
 ```
 
-
+<br/>
 Note: To be properly done:
-
-1. Run a logistic(?) model
-2. Get the coeficients of the model (with coef())
+<br/><br/>
+0. Replace the missing values in the nr of prey and predators (e.g. with average for all plants in that week) or remove those rows
+1. Run a non-linear model(?)
+2. Get the coefficients of the model (with coef())
 3. Use the right parameters and coefficients in the right function
 4. Predict what is going to happen further in time
+<br/><br/>
+To make a better model:
+1. Find out more about these preys and predators: what are these species?
+2. Are there any scientific papers about them? Are their growth and death rates already studied? 
+3. If not, maybe it could be good to study them (in non-stressful conditions - plenty food, no environmental harms) so we can apply the rates to the model and accurate predictions.
+<br/><br/>
+E.g. maybe something good to try would be library(mosaiC)
